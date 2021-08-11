@@ -1,0 +1,112 @@
+version: "3"
+
+volumes:
+  rabbitmq_data:
+    external: false
+    
+networks:
+  annotator_net:
+    external: false
+
+services:
+  frontend:
+    container_name: annotator_client_dev
+    build:
+      context: .
+      dockerfile: ./client/Dockerfile
+    environment:
+      - NODE_ENV=development
+    ports:
+      - 8080:8080
+    volumes:
+      - ./client:/workspace/client
+    networks:
+      - annotator_net
+    depends_on:
+      - webserver
+
+  webserver:
+    container_name: annotator_webserver_dev
+    build:
+      context: .
+      args:
+        uid: 1000
+        gid: 1000
+      dockerfile: ./backend/webserver/Dockerfile
+    ports:
+      - 5000:5000
+    volumes:
+      - ./backend/config:/workspace/config
+      - ./backend/webserver:/workspace/webserver
+      - ./backend/workers:/workspace/workers
+      - ./backend/database:/workspace/database
+      - ./storage/datasets:/workspace/datasets
+    environment:
+      - FILE_WATCHER=true
+      - FLASK_APP=webserver
+      - FLASK_ENV=development
+      - DEBUG=true
+      - MONGODB_HOST=mongodb://database/flask_dev
+      - BROKER_URL=amqp://user:password@messageq:5672//
+      - CELERY_RESULT_BACKEND=mongodb://database/flask_dev
+    networks:
+      - annotator_net
+    depends_on:
+      - database
+      - workers
+
+  workers:
+    # image: cdefga/aimed:workers-0.1.2
+    container_name: annotator_workers_dev
+    build:
+      context: .
+      args:
+        uid: 1000
+        gid: 1000
+      dockerfile: ./backend/workers/Dockerfile
+    environment:
+      - MONGODB_HOST=mongodb://database/flask_dev
+      - BROKER_URL=amqp://user:password@messageq:5672//
+      - CELERY_RESULT_BACKEND=mongodb://database/flask_dev
+    volumes:
+      - ./backend/config:/workspace/config
+      - ./backend/webserver:/workspace/webserver
+      - ./backend/workers:/workspace/workers
+      - ./backend/database:/workspace/database
+      - ./storage/datasets:/workspace/datasets
+    depends_on:
+      - messageq
+      - database
+    ports:
+      - 5555:5555
+    networks:
+      - annotator_net
+
+  database:
+    image: mongo:4.0
+    container_name: annotator_mongodb_dev
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+    volumes:
+      - ./storage/mongo/db:/data/db
+      - ./storage/mongo/configdb:/data/configdb
+    ports:
+      - 27017:27017
+    command: "mongod --logpath=/dev/null"
+    networks:
+      - annotator_net
+      
+  messageq:
+    image: rabbitmq:3
+    container_name: annotator_messageq_dev
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+      - MAX_MESSAGE_SIZE=512MB
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - 5672:5672
+    networks:
+      - annotator_net

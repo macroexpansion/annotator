@@ -1,0 +1,74 @@
+version: "3"
+
+volumes:
+  rabbitmq_data:
+    external: false
+
+networks:
+  annotator_net:
+    external: false
+
+services:
+  webserver:
+    image: 10.30.154.118:8989/aimed:webserver-latest
+    container_name: aimed_annotator_webclient
+    restart: always
+    ports:
+      - 8088:5000
+    environment:
+      - SECRET_KEY=RandomSecretKeyHere
+      - FLASK_APP=webserver
+      - FLASK_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=debug
+      - MONGODB_HOST=mongodb://database/prod
+      - BROKER_URL=amqp://user:password@messageq:5672//
+      - CELERY_RESULT_BACKEND=mongodb://database/prod
+      - NODE_ENV=production
+    volumes:
+      - ./storage/datasets:/workspace/datasets
+    depends_on:
+      - database
+      - workers
+    networks:
+      - annotator_net
+
+  workers:
+    image: 10.30.154.118:8989/aimed:workers-latest
+    container_name: aimed_annotator_workers
+    environment:
+      - MONGODB_HOST=mongodb://database/prod
+      - BROKER_URL=amqp://user:password@messageq:5672//
+      - CELERY_RESULT_BACKEND=mongodb://database/prod
+    volumes:
+      - ./storage/datasets:/workspace/datasets
+    depends_on:
+      - messageq
+      - database
+    networks:
+      - annotator_net
+
+  messageq:
+    image: 10.30.154.118:8989/aimed:rabbitmq-3
+    container_name: aimed_annotator_message_q
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - annotator_net
+
+  database:
+    image: 10.30.154.118:8989/aimed:mongo-4.0
+    container_name: aimed_annotator_mongodb
+    restart: always
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+    volumes:
+      - ./storage/mongo/db:/data/db
+      - ./storage/mongo/configdb:/data/configdb
+    command: mongod --logpath=/dev/null
+    networks:
+      - annotator_net
