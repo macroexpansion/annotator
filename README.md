@@ -1,5 +1,9 @@
 # annotator
 
+### Structure 
+- backend-end code in `backend/`  
+- front-end code in `client/` 
+
 ### Requirements
 - docker-compose
 - npm or yarn
