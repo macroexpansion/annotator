@@ -1,4 +1,4 @@
-# COCO Annotator Backend
+# Annotator Backend
 
 ## Config
 - Configuration for the backend: log level, database, worker config, ...
